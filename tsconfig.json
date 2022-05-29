@@ -1,0 +1,14 @@
+{
+  "extends": "./node_modules/@tsconfig/node14/tsconfig.json",
+  "compilerOptions": {
+    "experimentalDecorators": true,
+    "noEmit": true,
+    "typeRoots": [
+      "./node_modules/@types"
+    ]
+  },
+  "exclude": [
+    "node_modules",
+    "cdk.out"
+  ]
+}
