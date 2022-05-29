@@ -2,16 +2,12 @@ import { Duration, RemovalPolicy, Stack, StackProps } from 'aws-cdk-lib';
 import { Construct } from 'constructs';
 import * as events from 'aws-cdk-lib/aws-events';
 import * as targets from 'aws-cdk-lib/aws-events-targets';
-
 import * as iam from 'aws-cdk-lib/aws-iam';
 import * as dynamodb from 'aws-cdk-lib/aws-dynamodb';
 import * as lambda from 'aws-cdk-lib/aws-lambda';
-
 import { NodejsFunction, SourceMapMode } from 'aws-cdk-lib/aws-lambda-nodejs';
 
-
 import { CustomStackProps } from './custom-stack-props';
-import { LambdaStackProps } from './lambda-stack-props';
 import { join } from 'path';
 
 export class AppStack extends Stack {
@@ -24,11 +20,13 @@ export class AppStack extends Stack {
     const appsyncApiId = `${serviceName}-appsync-api-${stage}`;
     const appsyncApiKey = `${serviceName}-appsync-api-key-${stage}`;
     const approvalsTable = `${serviceName}-table-${stage}`;
+    const pendingGSI = 'pending-origin-index';
     const defaultRoleId = `${serviceName}-default-role-${stage}`;
 
     const eventNamespace = serviceName;
     const eventBusId = `${serviceName}-event-bus-${stage}`;
     const eventBridgeLambdaId = `${serviceName}-event-bus-handler-${stage}`;
+    const createApprovalRequestSource = `${serviceName}-${stage}-source`;
     const createApprovalRequestRuleId = `${serviceName}-${stage}-CreateApprovalRequest`;
 
     // Default IAM role
@@ -42,17 +40,29 @@ export class AppStack extends Stack {
     // DynamoDB
     const dynamoTable = new dynamodb.Table(this, approvalsTable, {
       partitionKey: {
-        name: 'origin',
+        name: 'action',
         type: dynamodb.AttributeType.STRING,
       },
       sortKey: {
-        name: 'originId',
+        name: 'origin',
         type: dynamodb.AttributeType.STRING,
       },
       tableName: approvalsTable,
       billingMode: dynamodb.BillingMode.PAY_PER_REQUEST,
       encryption: dynamodb.TableEncryption.AWS_MANAGED,
       removalPolicy: RemovalPolicy.DESTROY,
+    });
+
+    dynamoTable.addGlobalSecondaryIndex({
+      indexName: pendingGSI,
+      partitionKey: {
+        name: 'pending',
+        type: dynamodb.AttributeType.NUMBER,
+      },
+      sortKey: {
+        name: 'origin',
+        type: dynamodb.AttributeType.STRING,
+      },
     });
 
     const ddbPolicyStatement = new iam.PolicyStatement({
@@ -75,6 +85,7 @@ export class AppStack extends Stack {
       REGION: region,
       NAMESPACE: eventNamespace,
       APPROVALS_TABLE_NAME: dynamoTable.tableName,
+      APPROVALS_PENDING_GSI: pendingGSI,
       EVENT_BUS: eventBusId,
     };
 
@@ -90,7 +101,7 @@ export class AppStack extends Stack {
       },
       handler: 'handler',
       memorySize: 1024,
-      timeout: Duration.seconds(30),
+      timeout: Duration.seconds(10),
       runtime: lambda.Runtime.NODEJS_14_X,
       role: defaultRole,
       environment: environment,
@@ -115,7 +126,7 @@ export class AppStack extends Stack {
       description: 'Runs serverless approvals lambda to create a new approval request.',
       eventBus,
       eventPattern: {
-        source: [serviceName],
+        source: [createApprovalRequestSource],
       },
       targets: [new targets.LambdaFunction(eventBridgeLambda)],
     });

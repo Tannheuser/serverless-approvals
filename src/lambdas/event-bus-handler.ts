@@ -1,14 +1,29 @@
-// import { EventBridgeEvent, Context } from 'aws-lambda';
-//
-// import { ApprovalService } from '../services';
-// import { EventBridgeEventDetail } from '../types';
+import { EventBridgeEvent, Context } from 'aws-lambda';
+import { LambdaInterface } from '@aws-lambda-powertools/commons';
+import { Logger } from '@aws-lambda-powertools/logger';
 
-import { logger } from '../utils';
+import { ApprovalRequestRepository } from '../repositories';
+import { ApprovalService } from '../services';
+import { ApprovalRequestInput } from '../models';
 
-export const handler = async (event: any, context: any) => {
-    const origin = event.detail;
+const logger = new Logger({
+  logLevel: 'DEBUG',
+  serviceName: 'serverless-approvals-event-lambda'
+});
+const repository = new ApprovalRequestRepository(logger);
 
-    logger.info(event);
+class ApprovalEventLambda implements LambdaInterface {
+  // @logger.injectLambdaContext()
+  public async handler(event: EventBridgeEvent<string, ApprovalRequestInput>, context: Context) {
+    const { action, sub, ...origin } = event.detail;
 
-    return { status: 200 };
-};
+    logger.debug(`[Event bridge event]: ${JSON.stringify(event)}`);
+
+    return new ApprovalService(repository, logger).createApprovalRequest(action, origin, sub);
+  }
+}
+
+const lambdaInstance = new ApprovalEventLambda();
+
+export const handler = lambdaInstance.handler;
+

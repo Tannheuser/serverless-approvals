@@ -24,8 +24,8 @@
   "dependencies": {
     "@aws-lambda-powertools/logger": "^0.9.1",
     "aws-cdk-lib": "2.25.0",
+    "aws-sdk": "^2.1143.0",
     "constructs": "^10.1.19",
-    "middy": "^0.36.0",
     "source-map-support": "^0.5.21"
   }
 }
