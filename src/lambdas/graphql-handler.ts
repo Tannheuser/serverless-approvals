@@ -4,8 +4,9 @@ import { Logger } from '@aws-lambda-powertools/logger';
 
 import { ApprovalRequestRepository } from '../repositories';
 import { ApprovalService } from '../services';
-import { GraphqlQueryInput, Origin } from '../models';
-import { ApprovalQuery } from '../graphql';
+import { ApprovalMutation, ApprovalQuery } from '../graphql';
+import { ApprovalResult, GraphqlOperationInput, Origin } from '../models';
+import { ActionToApprove } from '../types';
 
 const logger = new Logger({
   logLevel: 'DEBUG',
@@ -13,24 +14,41 @@ const logger = new Logger({
 });
 const repository = new ApprovalRequestRepository(logger);
 
+type GraphqlOperationParameter = Origin & { action?: ActionToApprove, sub?: string };
+
 class GraphQLLambda implements LambdaInterface {
   // @logger.injectLambdaContext()
-  public async handler(event: AppSyncResolverEvent<GraphqlQueryInput<Origin & { sub?: string }>, unknown>, context: Context) {
+  public async handler(event: AppSyncResolverEvent<GraphqlOperationInput<GraphqlOperationParameter>, unknown>, context: Context) {
 
     logger.debug(`[AppSync event]: ${JSON.stringify(event)}`);
 
-    switch (event.info.fieldName) {
-      case ApprovalQuery.GetRequests: {
-        const { sub, ...origin } = event?.arguments?.filter;
-        return new ApprovalService(repository, logger).getPendingRequests(origin);
+    try {
+      const approvalService = new ApprovalService(repository, logger);
+
+      switch (event.info.fieldName) {
+        case ApprovalQuery.GetRequests: {
+          const { sub, action, ...origin } = event?.arguments?.filter || {};
+          return approvalService.getPendingRequests(origin);
+        }
+        case ApprovalQuery.GetReviewableRequests: {
+          const { sub, action, ...origin } = event?.arguments?.filter || {};
+          return approvalService.getReviewablePendingRequests(sub || '', origin);
+        }
+        case ApprovalMutation.ApproveRequest: {
+          const { sub, ...approvalResult } = event?.arguments?.input || {};
+          return approvalService.changeApprovalRequestStatus(<ApprovalResult>{ ...approvalResult, approved: true }, sub || '');
+
+        }
+        case ApprovalMutation.RejectRequest: {
+          const { sub, ...approvalResult } = event?.arguments?.input || {}
+          return approvalService.changeApprovalRequestStatus(<ApprovalResult>approvalResult, sub || '');
+        }
+        default:
+          return null;
       }
-      case ApprovalQuery.GetReviewableRequests: {
-        const { sub, ...origin } = event?.arguments?.filter;
-        return new ApprovalService(repository, logger).getReviewablePendingRequests(sub || '', origin);
+      } catch (error) {
+        logger.error('[AppSync GraphQL lambda error]', error as Error)
       }
-      default:
-        return null;
-    }
   }
 }
 

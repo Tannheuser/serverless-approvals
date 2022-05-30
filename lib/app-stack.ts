@@ -11,7 +11,7 @@ import { NodejsFunction, SourceMapMode } from 'aws-cdk-lib/aws-lambda-nodejs';
 import { CustomStackProps } from './custom-stack-props';
 import { join } from 'path';
 import { readFileSync } from 'fs';
-import { ApprovalQuery } from '../src/graphql';
+import { ApprovalMutation, ApprovalQuery } from '../src/graphql';
 
 export class AppStack extends Stack {
   constructor(scope: Construct, id: string, props?: StackProps & CustomStackProps) {
@@ -28,6 +28,8 @@ export class AppStack extends Stack {
     const appSyncLambdaDataSource = `${serviceName}-appsync-data-source-${stage}`;
     const pendingRequestsResolverId = `${serviceName}-${ApprovalQuery.GetRequests}-${stage}`;
     const reviewableRequestsResolverId = `${serviceName}-${ApprovalQuery.GetReviewableRequests}-${stage}`;
+    const approveRequestResolverId = `${serviceName}-${ApprovalMutation.ApproveRequest}-${stage}`;
+    const rejectRequestResolverId = `${serviceName}-${ApprovalMutation.RejectRequest}-${stage}`;
     const approvalsTable = `${serviceName}-table-${stage}`;
     const pendingGSI = 'pending-origin-index';
     const defaultRoleId = `${serviceName}-default-role-${stage}`;
@@ -203,10 +205,26 @@ export class AppStack extends Stack {
       dataSourceName: lambdaDataSource.attrName,
     });
 
-    getPendingRequestsResolver.addDependsOn(graphqlApiSchema);
+    const approveRequestResolver = new appsync.CfnResolver(this, approveRequestResolverId, {
+      apiId: graphqlApi.attrApiId,
+      typeName: 'Mutation',
+      fieldName: ApprovalMutation.ApproveRequest,
+      dataSourceName: lambdaDataSource.attrName,
+    });
+
+    const rejectRequestResolver = new appsync.CfnResolver(this, rejectRequestResolverId, {
+      apiId: graphqlApi.attrApiId,
+      typeName: 'Mutation',
+      fieldName: ApprovalMutation.RejectRequest,
+      dataSourceName: lambdaDataSource.attrName,
+    });
+
+    // getPendingRequestsResolver.addDependsOn(graphqlApiSchema);
     getPendingRequestsResolver.addDependsOn(lambdaDataSource);
-    getReviewableRequestsResolver.addDependsOn(graphqlApiSchema);
+    // getReviewableRequestsResolver.addDependsOn(graphqlApiSchema);
     getReviewableRequestsResolver.addDependsOn(lambdaDataSource);
+    approveRequestResolver.addDependsOn(lambdaDataSource);
+    rejectRequestResolver.addDependsOn(lambdaDataSource);
 
     const statement = new iam.PolicyStatement({
       actions: ['lambda:InvokeFunction'],

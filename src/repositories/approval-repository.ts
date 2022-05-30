@@ -72,6 +72,6 @@ export class ApprovalRequestRepository implements BaseRepository {
         RETURNING ALL NEW *`;
     const result = await this.executeStatement(statement);
 
-    return result.length ? result[0] : request;
+    return result;
   }
 }

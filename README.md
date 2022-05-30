@@ -10,6 +10,7 @@ This is a project to manage approval requests using AWS serverless infrastructur
 
 * It's not possible to create multiple requests of the same type for the same origin.
 * You have to specify user sub manually in GraphQL queries and mutations.
+* No unit tests (yet).
 
 ### Possible future improvements
 
@@ -101,7 +102,7 @@ In this case you have to provide user `sub` as a filter parameter.
 
 ```console
 query MyQuery {
-  getPendingRequests(filter: {sub: "user-sub-1"}) {
+  getReviewableRequests(filter: {sub: "user-sub-2", originType: "transaction"}) {
     action
     originId
     originType
@@ -111,11 +112,49 @@ query MyQuery {
 }
 ```
 
+### Mutations
 
+You could approve or reject pending approval requests, which were originally created by other user.
 
-## Reviewing approval requests
+###### Approve pending request
 
-AppSync Mutations
+```console
+mutation MyMutation {
+  approveRequest(
+    input: {
+      action: "create"
+      message: "Approved",
+      originId: "QWERTY",
+      originType: "transaction",
+      sub: "user-sub-2"}) {
+    action
+    originId
+    originType
+    status
+    updatedAt
+  }
+}
+
+```
+
+###### Reject pending request
+
+```console
+mutation MyMutation {
+  rejectRequest(
+    input: {
+      action: "create"
+      originId: "QWERTY",
+      originType: "transaction",
+      sub: "user-sub-2"}) {
+    action
+    originId
+    originType
+    status
+    updatedAt
+  }
+}
+```
 
 ## Other useful commands
 

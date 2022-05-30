@@ -1,10 +1,16 @@
 schema {
     query: Query
+    mutation: Mutation
 }
 
 type Query {
-    getPendingRequests(filter: ApprovalRequestFilter): [ApprovalRequest]
+    getPendingRequests(filter: ApprovalRequestFilter!): [ApprovalRequest]
     getReviewableRequests(filter: ReviewableRequestFilter!): [ApprovalRequest]
+}
+
+type Mutation {
+  approveRequest(input: ProcessRequestInput!): ApprovalRequest
+  rejectRequest(input: ProcessRequestInput!): ApprovalRequest
 }
 
 type ApprovalRequest {
@@ -12,7 +18,10 @@ type ApprovalRequest {
     originType: String!
     originId: String!
     status: ApprovalRequestStatus
+    createdAt: String
     createdBy: String
+    updatedAt: String
+    updatedBy: String
 }
 
 input ApprovalRequestFilter {
@@ -27,10 +36,11 @@ input ReviewableRequestFilter {
 }
 
 input ProcessRequestInput {
-    approved: Boolean!
-    message: String
+    action: String!
     originId: String!
     originType: String!
+    sub: String!
+    message: String
 }
 
 enum ApprovalRequestStatus {

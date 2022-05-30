@@ -22,7 +22,7 @@ export class ApprovalService {
   };
 
   private setRequestStatus = async (request: ApprovalRequest) => {
-    const result: object[] = []; //await this.repository.setStatus(request);
+    const result = await this.repository.updateStatus(request);
     const requests = this.convertDynamoResponse(result);
 
     return requests?.length ? requests[0] : null;
@@ -49,7 +49,7 @@ export class ApprovalService {
     }
   }
 
-  async getReviewablePendingRequests(sub: string, origin: Origin) {
+  async getReviewablePendingRequests(sub: string, origin: Origin, action?: ActionToApprove) {
     this.logger.debug(`[Get Reviewable Requests]: Sub: ${sub}, Origin: ${JSON.stringify(origin)}`);
 
     try {
@@ -90,7 +90,7 @@ export class ApprovalService {
   }
 
   async changeApprovalRequestStatus(approval: ApprovalResult, sub: string) {
-    this.logger.debug(`[Change Request Status]: Approval result: ${approval}`);
+    this.logger.debug(`[Change Request Status]: Approval result: ${JSON.stringify(approval)}`);
 
     const { action, message, approved, ...origin } = approval;
 
@@ -99,23 +99,28 @@ export class ApprovalService {
       throw new Error('Invalid origin');
     }
 
-    const existingRequest = await this.getPendingRequests(origin);
+    try {
+      const existingRequest = await this.getReviewablePendingRequests(sub, origin, action);
 
-    if (!existingRequest?.length) {
-      throw Error('Approval request does not exist');
+      if (!existingRequest?.length) {
+        throw Error('Approval request does not exist');
+      }
+
+      const currentTime = Date.now();
+      const request: ApprovalRequest = {
+        action,
+        origin: generateCombinedKey(origin),
+        updatedAt: currentTime,
+        updatedBy: sub,
+        message,
+        status: approved ? ApprovalRequestStatus.Approved : ApprovalRequestStatus.Rejected,
+      };
+      const updatedRequest = await this.setRequestStatus(request);
+
+      return updatedRequest;
+    } catch (error) {
+      this.logger.error('[Change Request Status Error]: ', error as Error);
+      throw error;
     }
-
-    const currentTime = Date.now();
-    const request: ApprovalRequest = {
-      action,
-      origin: generateCombinedKey(origin),
-      updatedAt: currentTime,
-      updatedBy: sub,
-      message,
-      status: approved ? ApprovalRequestStatus.Approved : ApprovalRequestStatus.Rejected,
-    };
-    const updatedRequest = await this.setRequestStatus(request);
-
-    return updatedRequest;
   }
 }
