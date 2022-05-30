@@ -1,4 +1,6 @@
+import { ActionToApprove } from '../types';
+
 export interface KeySchema {
-  action: string;
+  action: ActionToApprove;
   origin: string;
 }

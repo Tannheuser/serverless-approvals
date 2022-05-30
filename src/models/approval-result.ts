@@ -1,7 +1,8 @@
 import { Origin } from './origin';
 import { ActionToApprove } from '../types';
 
-export interface ApprovalRequestInput extends Origin {
+export interface ApprovalResult extends Origin {
   action: ActionToApprove;
-  sub: string;
+  message?: string;
+  approved?: boolean;
 }

@@ -1,1 +1,1 @@
-export * from './function-params';
+export * from './action-to-approve';

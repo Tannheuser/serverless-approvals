@@ -1,5 +1,6 @@
 import { Duration, RemovalPolicy, Stack, StackProps } from 'aws-cdk-lib';
 import { Construct } from 'constructs';
+import * as appsync from 'aws-cdk-lib/aws-appsync';
 import * as events from 'aws-cdk-lib/aws-events';
 import * as targets from 'aws-cdk-lib/aws-events-targets';
 import * as iam from 'aws-cdk-lib/aws-iam';
@@ -19,10 +20,12 @@ export class AppStack extends Stack {
     const stage = props?.stage || 'dev';
     const appsyncApiId = `${serviceName}-appsync-api-${stage}`;
     const appsyncApiKey = `${serviceName}-appsync-api-key-${stage}`;
+    const appsyncApiSchema = `${serviceName}-appsync-api-schema-${stage}`;
+    const appSyncLambdaId = `${serviceName}-graphql-handler-${stage}`;
+    const appSyncLambdaDataSource = `${serviceName}-appsync-data-source-${stage}`;
     const approvalsTable = `${serviceName}-table-${stage}`;
     const pendingGSI = 'pending-origin-index';
     const defaultRoleId = `${serviceName}-default-role-${stage}`;
-
     const eventNamespace = serviceName;
     const eventBusId = `${serviceName}-event-bus-${stage}`;
     const eventBridgeLambdaId = `${serviceName}-event-bus-handler-${stage}`;
@@ -31,7 +34,7 @@ export class AppStack extends Stack {
 
     // Default IAM role
     const defaultRole = new iam.Role(this, defaultRoleId, {
-      assumedBy: new iam.ServicePrincipal('lambda.amazonaws.com'),
+      assumedBy: new iam.CompositePrincipal(new iam.ServicePrincipal('lambda.amazonaws.com'), new iam.ServicePrincipal('appsync.amazonaws.com')),
       description: 'Default role for serverless approvals service.',
       managedPolicies: [iam.ManagedPolicy.fromAwsManagedPolicyName('service-role/AWSLambdaBasicExecutionRole')],
       roleName: defaultRoleId
@@ -109,6 +112,12 @@ export class AppStack extends Stack {
       tracing: lambda.Tracing.ACTIVE,
     };
 
+    const appSyncLambda = new NodejsFunction(this, appSyncLambdaId, {
+      ...lambdaProperties,
+      functionName: appSyncLambdaId,
+      entry: join(__dirname, '../src/lambdas/graphql-handler.ts'),
+    });
+
     const eventBridgeLambda = new NodejsFunction(this, eventBridgeLambdaId, {
       ...lambdaProperties,
       functionName: eventBridgeLambdaId,
@@ -138,5 +147,79 @@ export class AppStack extends Stack {
         resources: [eventBus.eventBusArn],
       })
     );
+
+    // AppSync API
+    const graphqlApi = new appsync.CfnGraphQLApi(this, appsyncApiId, {
+      name: appsyncApiId,
+      authenticationType: 'API_KEY',
+    });
+
+     const graphApiKey = new appsync.CfnApiKey(this, appsyncApiKey, {
+      apiId: graphqlApi.attrApiId,
+    });
+
+    const graphqlApiSchema = new appsync.CfnGraphQLSchema(
+      this,
+      appsyncApiSchema,
+      {
+        apiId: graphqlApi.attrApiId,
+        definition: `
+          schema {
+            query: Query
+          }
+          type Query {
+            getPendingRequests(filter: ApprovalRequestFilter!): [ApprovalRequest]
+          }
+          type ApprovalRequest {
+            action: String!
+            originType: String!
+            originId: String!
+          }
+          input ApprovalRequestFilter {
+            originType: String!
+            originId: String
+          }
+        `,
+      }
+    );
+
+    graphqlApiSchema.addDependsOn(graphqlApi);
+
+    const lambdaDataSource = new appsync.CfnDataSource(
+      this,
+      appSyncLambdaDataSource,
+      {
+        apiId: graphqlApi.attrApiId,
+        name: 'GraphQLDataSource',
+        type: "AWS_LAMBDA",
+        lambdaConfig: {
+          lambdaFunctionArn: appSyncLambda.functionArn,
+        },
+        serviceRoleArn: defaultRole.roleArn,
+      }
+    );
+
+    lambdaDataSource.addDependsOn(graphqlApi);
+
+    const getPendingRequestsResolver = new appsync.CfnResolver(this, 'getPendingRequests', {
+      apiId: graphqlApi.attrApiId,
+      typeName: 'Query',
+      fieldName: 'getPendingRequests',
+      dataSourceName: lambdaDataSource.attrName,
+    });
+
+    getPendingRequestsResolver.addDependsOn(graphqlApiSchema);
+    getPendingRequestsResolver.addDependsOn(lambdaDataSource);
+
+    const statement = new iam.PolicyStatement({
+      actions: ['lambda:InvokeFunction'],
+      resources: [ appSyncLambda.functionArn ]
+    });
+
+    const policy = new iam.Policy(this, 'myLambda_policy', {
+        statements: [statement]
+    });
+
+    policy.attachToRole(<iam.IRole> appSyncLambda.role);
   }
 }

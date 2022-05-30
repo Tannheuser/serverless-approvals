@@ -1,8 +1,9 @@
 import { Logger } from '@aws-lambda-powertools/logger';
 
-import { ApprovalRequest, BaseRepository, Origin } from '../models';
+import { ApprovalRequest, ApprovalResult, BaseRepository, Origin } from '../models';
 import { ApprovalRequestStatus } from '../models';
 import { generateCombinedKey, splitCombinedKey } from '../utils';
+import { ActionToApprove } from '../types';
 
 export class ApprovalService {
   constructor( private readonly repository: BaseRepository, private readonly logger: Logger) {
@@ -35,20 +36,33 @@ export class ApprovalService {
     };
   };
 
-  async getPendingRequests(origin?: Origin) {
-    const result: object[] = []; // await this.repository.getPendingItems(origin);
+  async getPendingRequests(origin: Origin) {
+    this.logger.debug(`[Get Pending Requests]: Origin: ${JSON.stringify(origin)}`);
 
-    return this.convertDynamoResponse(result);
+    try {
+      const result = await this.repository.getPendingItems(origin);
+
+      return this.convertDynamoResponse(result);
+    } catch (error) {
+      this.logger.error('[Get Pending Requests Error]: ', error as Error);
+      throw error;
+    }
   }
 
-  async getReviewablePendingRequests(sub: string, origin?: Origin) {
-    const result: object[] = []; // await this.repository.getPendingItems(origin, sub);
+  async getReviewablePendingRequests(sub: string, origin: Origin) {
+    this.logger.debug(`[Get Reviewable Requests]: Sub: ${sub}, Origin: ${JSON.stringify(origin)}`);
 
-    return this.convertDynamoResponse(result);
+    try {
+      const result = await this.repository.getPendingItems(origin, sub);
+
+      return this.convertDynamoResponse(result);
+    } catch (error) {
+      this.logger.error('[Get Reviewable Requests Error]: ', error as Error);
+      throw error;
+    }
   }
 
-
-  async createApprovalRequest(action: string, origin: Origin, sub: string) {
+  async createApprovalRequest(action: ActionToApprove, origin: Origin, sub: string) {
     this.logger.debug(`[Create Approval Request]: Action: ${action}, Origin: ${JSON.stringify(origin)}, Sub: ${sub}`);
 
     if (!origin.originId || !origin.originType) {
@@ -56,56 +70,52 @@ export class ApprovalService {
       throw new Error('Invalid origin');
     }
 
+    try {
+      const currentTime = Date.now();
+      const request: ApprovalRequest = {
+        action,
+        origin: generateCombinedKey(origin),
+        createdAt: currentTime,
+        createdBy: sub,
+        pending: 1,
+        status: ApprovalRequestStatus.Pending
+      };
+      const result = await this.repository.createItem(request);
+
+      return result;
+    } catch (error) {
+      this.logger.error('[Create Approval Request Error]: ', error as Error);
+      throw error;
+    }
+  }
+
+  async changeApprovalRequestStatus(approval: ApprovalResult, sub: string) {
+    this.logger.debug(`[Change Request Status]: Approval result: ${approval}`);
+
+    const { action, message, approved, ...origin } = approval;
+
+    if (!origin.originId || !origin.originType) {
+      this.logger.error('Invalid origin: ' + JSON.stringify(origin));
+      throw new Error('Invalid origin');
+    }
+
+    const existingRequest = await this.getPendingRequests(origin);
+
+    if (!existingRequest?.length) {
+      throw Error('Approval request does not exist');
+    }
+
     const currentTime = Date.now();
     const request: ApprovalRequest = {
       action,
       origin: generateCombinedKey(origin),
-      createdAt: currentTime,
-      createdBy: sub,
-      pending: 1,
-      status: ApprovalRequestStatus.Pending
+      updatedAt: currentTime,
+      updatedBy: sub,
+      message,
+      status: approved ? ApprovalRequestStatus.Approved : ApprovalRequestStatus.Rejected,
     };
-    const result = await this.repository.createItem(request);
+    const updatedRequest = await this.setRequestStatus(request);
 
-    return result;
+    return updatedRequest;
   }
-
-  // @verbose()
-  // async changeApprovalRequestStatus(approval: ApprovalResult) {
-  //   const { message, approved, ...origin } = approval;
-  //
-  //   if (!origin.originId || !origin.originType) {
-  //     throw new Error('Invalid origin');
-  //   }
-  //
-  //   const existingRequest = await this.getPendingRequests(origin);
-  //
-  //   if (!existingRequest?.length) {
-  //     // errorJson('APPROVAL_REQUEST_DOES_NOT_EXIST', approval);
-  //     throw Error('Approval request does not exist');
-  //   }
-  //
-  //   const request: ApprovalRequest = {
-  //     // origin: generateEntityName(origin),
-  //     createdAt: currentTime(),
-  //     updatedAt: currentTime(),
-  //     // updatedBy: this.context.sub,
-  //     message,
-  //     status: approved ? ApprovalRequestStatus.Approved : ApprovalRequestStatus.Rejected,
-  //   };
-  //   const updatedRequest = await this.setRequestStatus(request);
-
-    // if (this.eventMessenger) {
-    //   const eventType = generateEventDetailType(
-    //     origin.originType,
-    //     approved ? EventType.RequestApproved : EventType.RequestRejected
-    //   );
-    //   const eventResponse = this.getEventResponse(origin, request.updatedAt);
-    //   await this.eventMessenger.notify(eventType, eventResponse);
-    // } else {
-    //   errorJson('EVENT_MESSENGER_DOES_NOT_SET', request);
-    // }
-
-    // return updatedRequest;
-  // }
 }

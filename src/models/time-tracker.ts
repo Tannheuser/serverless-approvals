@@ -1,5 +1,5 @@
 export interface TimeTracker {
-  createdAt: number;
+  createdAt?: number;
   createdBy?: string;
   updatedAt?: number;
   updatedBy?: string;
