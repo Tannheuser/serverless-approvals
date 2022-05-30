@@ -4,7 +4,7 @@ This is a project to manage approval requests using AWS serverless infrastructur
 
 ## Architecture overview
 
-Architectural diagram
+![alt text](https://github.com/Tannheuser/serverless-approvals/blob/main/misc/diagram.png?raw=true)
 
 ### Current limitations
 
