@@ -4,5 +4,6 @@ export * from './approval-request-status';
 export * from './approval-result';
 export * from './base-repository';
 export * from './combined-key';
+export * from './event-type';
 export * from './graphql-operation-input';
 export * from './origin';

@@ -1,12 +1,16 @@
 import { Logger } from '@aws-lambda-powertools/logger';
 
-import { ApprovalRequest, ApprovalResult, BaseRepository, Origin } from '../models';
+import { ApprovalRequest, ApprovalResult, BaseRepository, EventType, Origin } from '../models';
 import { ApprovalRequestStatus } from '../models';
-import { generateCombinedKey, splitCombinedKey } from '../utils';
 import { ActionToApprove } from '../types';
+import { EventMessenger } from './event-messenger';
+import { generateCombinedKey, generateEventDetailType, splitCombinedKey } from '../utils';
 
 export class ApprovalService {
-  constructor( private readonly repository: BaseRepository, private readonly logger: Logger) {
+  constructor(
+    private readonly repository: BaseRepository,
+    private readonly logger: Logger,
+    private readonly eventMessenger: EventMessenger) {
   }
 
   private convertDynamoResponse = (items: { [p: string]: any }[] | undefined) => {
@@ -66,7 +70,7 @@ export class ApprovalService {
     this.logger.debug(`[Create Approval Request]: Action: ${action}, Origin: ${JSON.stringify(origin)}, Sub: ${sub}`);
 
     if (!origin.originId || !origin.originType) {
-      this.logger.error('Invalid origin: ' + JSON.stringify(origin));
+      this.logger.error('[Create Approval Request Error]: Invalid origin. ' + JSON.stringify(origin));
       throw new Error('Invalid origin');
     }
 
@@ -82,6 +86,14 @@ export class ApprovalService {
       };
       const result = await this.repository.createItem(request);
 
+      if (this.eventMessenger) {
+        const eventType = generateEventDetailType(origin.originType, EventType.RequestCreated);
+        const eventResponse = this.getEventResponse(origin, request.createdAt);
+        await this.eventMessenger.notify(eventType, eventResponse);
+      } else {
+        this.logger.error('[Create Approval Request Error]: Event Messenger Does Not Initialised.');
+      }
+
       return result;
     } catch (error) {
       this.logger.error('[Create Approval Request Error]: ', error as Error);
@@ -95,7 +107,7 @@ export class ApprovalService {
     const { action, message, approved, ...origin } = approval;
 
     if (!origin.originId || !origin.originType) {
-      this.logger.error('Invalid origin: ' + JSON.stringify(origin));
+      this.logger.error('[Change Request Status Error]: Invalid origin. ' + JSON.stringify(origin));
       throw new Error('Invalid origin');
     }
 
@@ -116,6 +128,17 @@ export class ApprovalService {
         status: approved ? ApprovalRequestStatus.Approved : ApprovalRequestStatus.Rejected,
       };
       const updatedRequest = await this.setRequestStatus(request);
+
+      if (this.eventMessenger) {
+        const eventType = generateEventDetailType(
+          origin.originType,
+          approved ? EventType.RequestApproved : EventType.RequestRejected
+        );
+        const eventResponse = this.getEventResponse(origin, request.updatedAt);
+        await this.eventMessenger.notify(eventType, eventResponse);
+      } else {
+        this.logger.error('[Change Request Status Error]: Event Messenger Does Not Initialised.');
+      }
 
       return updatedRequest;
     } catch (error) {

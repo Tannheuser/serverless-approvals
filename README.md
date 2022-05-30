@@ -14,6 +14,7 @@ This is a project to manage approval requests using AWS serverless infrastructur
 
 ### Possible future improvements
 
+* Make log level configurable.
 * Use another authentication type for API calls (instead of API KEY).
 * Be able to fetch user sub from API calls (from token or lambda context);
 * Use DynamoDB Streams to interact with consumer services in a more event driven way.
@@ -40,7 +41,7 @@ Run cdk synth to synthesize an AWS CloudFormation template:
 cdk synth
 ```
 
-Run cdk deploy, specify your named profile if needed:
+Run cdk deploy:
 
 ```console
 cdk deploy

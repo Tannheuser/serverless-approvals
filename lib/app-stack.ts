@@ -219,9 +219,7 @@ export class AppStack extends Stack {
       dataSourceName: lambdaDataSource.attrName,
     });
 
-    // getPendingRequestsResolver.addDependsOn(graphqlApiSchema);
     getPendingRequestsResolver.addDependsOn(lambdaDataSource);
-    // getReviewableRequestsResolver.addDependsOn(graphqlApiSchema);
     getReviewableRequestsResolver.addDependsOn(lambdaDataSource);
     approveRequestResolver.addDependsOn(lambdaDataSource);
     rejectRequestResolver.addDependsOn(lambdaDataSource);

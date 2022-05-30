@@ -3,13 +3,14 @@ import { LambdaInterface } from '@aws-lambda-powertools/commons';
 import { Logger } from '@aws-lambda-powertools/logger';
 
 import { ApprovalRequestRepository } from '../repositories';
-import { ApprovalService } from '../services';
+import { ApprovalService, EventMessenger } from '../services';
 import { ApprovalRequestInput } from '../models';
 
 const logger = new Logger({
   logLevel: 'DEBUG',
   serviceName: 'serverless-approvals-event-lambda'
 });
+const eventMessenger = new EventMessenger();
 const repository = new ApprovalRequestRepository(logger);
 
 class ApprovalEventLambda implements LambdaInterface {
@@ -19,7 +20,7 @@ class ApprovalEventLambda implements LambdaInterface {
 
     logger.debug(`[Event bridge event]: ${JSON.stringify(event)}`);
 
-    return new ApprovalService(repository, logger).createApprovalRequest(action, origin, sub);
+    return new ApprovalService(repository, logger, eventMessenger).createApprovalRequest(action, origin, sub);
   }
 }
 

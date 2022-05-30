@@ -3,7 +3,7 @@ import { LambdaInterface } from '@aws-lambda-powertools/commons';
 import { Logger } from '@aws-lambda-powertools/logger';
 
 import { ApprovalRequestRepository } from '../repositories';
-import { ApprovalService } from '../services';
+import { ApprovalService, EventMessenger } from '../services';
 import { ApprovalMutation, ApprovalQuery } from '../graphql';
 import { ApprovalResult, GraphqlOperationInput, Origin } from '../models';
 import { ActionToApprove } from '../types';
@@ -12,6 +12,7 @@ const logger = new Logger({
   logLevel: 'DEBUG',
   serviceName: 'serverless-approvals-graphql-lambda'
 });
+const eventMessenger = new EventMessenger();
 const repository = new ApprovalRequestRepository(logger);
 
 type GraphqlOperationParameter = Origin & { action?: ActionToApprove, sub?: string };
@@ -23,7 +24,7 @@ class GraphQLLambda implements LambdaInterface {
     logger.debug(`[AppSync event]: ${JSON.stringify(event)}`);
 
     try {
-      const approvalService = new ApprovalService(repository, logger);
+      const approvalService = new ApprovalService(repository, logger, eventMessenger);
 
       switch (event.info.fieldName) {
         case ApprovalQuery.GetRequests: {
