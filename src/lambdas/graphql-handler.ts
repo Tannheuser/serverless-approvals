@@ -5,6 +5,7 @@ import { Logger } from '@aws-lambda-powertools/logger';
 import { ApprovalRequestRepository } from '../repositories';
 import { ApprovalService } from '../services';
 import { GraphqlQueryInput, Origin } from '../models';
+import { ApprovalQuery } from '../graphql';
 
 const logger = new Logger({
   logLevel: 'DEBUG',
@@ -19,9 +20,14 @@ class GraphQLLambda implements LambdaInterface {
     logger.debug(`[AppSync event]: ${JSON.stringify(event)}`);
 
     switch (event.info.fieldName) {
-      case 'getPendingRequests':
+      case ApprovalQuery.GetRequests: {
         const { sub, ...origin } = event?.arguments?.filter;
         return new ApprovalService(repository, logger).getPendingRequests(origin);
+      }
+      case ApprovalQuery.GetReviewableRequests: {
+        const { sub, ...origin } = event?.arguments?.filter;
+        return new ApprovalService(repository, logger).getReviewablePendingRequests(sub || '', origin);
+      }
       default:
         return null;
     }

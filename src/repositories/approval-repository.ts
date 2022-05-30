@@ -1,6 +1,5 @@
 import { Logger } from '@aws-lambda-powertools/logger';
 import DynamoDB from 'aws-sdk/clients/dynamodb';
-import { Converter } from 'aws-sdk/lib/dynamodb/converter';
 
 import { ApprovalRequest, BaseRepository, Origin } from '../models';
 import { generateCombinedKey, stringify } from '../utils';
@@ -10,15 +9,15 @@ export class ApprovalRequestRepository implements BaseRepository {
   private tableName = process.env.APPROVALS_TABLE_NAME;
   private pendingIndex = process.env.APPROVALS_PENDING_GSI;
   private dynamoDB = new DynamoDB();
-  private converter = Converter;
+  private converter = DynamoDB.Converter;
 
   constructor(private readonly logger: Logger) {
   }
 
   private executeStatement = async (statement: string) => {
+    this.logger.debug(`[Execute statement]: ${statement}`);
     const result = await this.dynamoDB.executeStatement({Statement: statement}).promise();
-
-    this.logger.debug(`[Execute statement]: ${JSON.stringify(result)}`);
+    this.logger.debug(`[Execute statement result]: ${JSON.stringify(result)}`);
 
     return (result.Items || []).map(item => this.converter.unmarshall(item)) as ApprovalRequest[];
   };
@@ -39,6 +38,10 @@ export class ApprovalRequestRepository implements BaseRepository {
     return sub ? `AND "createdBy" <> '${sub}'` : '';
   };
 
+  private generateActionQuery = (action: string | undefined) => {
+    return action ? `AND "action" = '${action}'` : '';
+  };
+
   async createItem (request: ApprovalRequest) {
     const statement = `INSERT INTO "${this.tableName}" value ${stringify(request)}`;
     await this.executeStatement(statement);
@@ -48,8 +51,9 @@ export class ApprovalRequestRepository implements BaseRepository {
 
   getPendingItems(origin: Origin, sub?: string, action?: ActionToApprove) {
     const subQuery = this.generateCreatedByQuery(sub);
-    const query = `SELECT * FROM "${this.tableName}"."${this.pendingIndex}" WHERE '${this.generateOriginQuery(origin)}'`;
-    const statement = `${query} ${subQuery}`;
+    const actionQuery = this.generateActionQuery(action);
+    const query = `SELECT * FROM "${this.tableName}"."${this.pendingIndex}" WHERE ${this.generateOriginQuery(origin)}`;
+    const statement = `${query} ${subQuery} ${actionQuery}`;
 
     return this.executeStatement(statement);
   }

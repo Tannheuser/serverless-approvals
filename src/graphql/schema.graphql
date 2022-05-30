@@ -1,0 +1,41 @@
+schema {
+    query: Query
+}
+
+type Query {
+    getPendingRequests(filter: ApprovalRequestFilter): [ApprovalRequest]
+    getReviewableRequests(filter: ReviewableRequestFilter!): [ApprovalRequest]
+}
+
+type ApprovalRequest {
+    action: String!
+    originType: String!
+    originId: String!
+    status: ApprovalRequestStatus
+    createdBy: String
+}
+
+input ApprovalRequestFilter {
+    originType: String!
+    originId: String
+}
+
+input ReviewableRequestFilter {
+    originType: String!
+    originId: String
+    sub: String!
+}
+
+input ProcessRequestInput {
+    approved: Boolean!
+    message: String
+    originId: String!
+    originType: String!
+}
+
+enum ApprovalRequestStatus {
+  Approved,
+  Rejected,
+  Deleted,
+  Pending
+}

@@ -10,6 +10,8 @@ import { NodejsFunction, SourceMapMode } from 'aws-cdk-lib/aws-lambda-nodejs';
 
 import { CustomStackProps } from './custom-stack-props';
 import { join } from 'path';
+import { readFileSync } from 'fs';
+import { ApprovalQuery } from '../src/graphql';
 
 export class AppStack extends Stack {
   constructor(scope: Construct, id: string, props?: StackProps & CustomStackProps) {
@@ -21,8 +23,11 @@ export class AppStack extends Stack {
     const appsyncApiId = `${serviceName}-appsync-api-${stage}`;
     const appsyncApiKey = `${serviceName}-appsync-api-key-${stage}`;
     const appsyncApiSchema = `${serviceName}-appsync-api-schema-${stage}`;
+    const appSyncLambdaPolicy = `${serviceName}-lambda-policy-${stage}`;
     const appSyncLambdaId = `${serviceName}-graphql-handler-${stage}`;
     const appSyncLambdaDataSource = `${serviceName}-appsync-data-source-${stage}`;
+    const pendingRequestsResolverId = `${serviceName}-${ApprovalQuery.GetRequests}-${stage}`;
+    const reviewableRequestsResolverId = `${serviceName}-${ApprovalQuery.GetReviewableRequests}-${stage}`;
     const approvalsTable = `${serviceName}-table-${stage}`;
     const pendingGSI = 'pending-origin-index';
     const defaultRoleId = `${serviceName}-default-role-${stage}`;
@@ -157,29 +162,12 @@ export class AppStack extends Stack {
      const graphApiKey = new appsync.CfnApiKey(this, appsyncApiKey, {
       apiId: graphqlApi.attrApiId,
     });
-
     const graphqlApiSchema = new appsync.CfnGraphQLSchema(
       this,
       appsyncApiSchema,
       {
         apiId: graphqlApi.attrApiId,
-        definition: `
-          schema {
-            query: Query
-          }
-          type Query {
-            getPendingRequests(filter: ApprovalRequestFilter!): [ApprovalRequest]
-          }
-          type ApprovalRequest {
-            action: String!
-            originType: String!
-            originId: String!
-          }
-          input ApprovalRequestFilter {
-            originType: String!
-            originId: String
-          }
-        `,
+        definition: readFileSync(join(__dirname, '../src/graphql/schema.graphql')).toString(),
       }
     );
 
@@ -201,22 +189,31 @@ export class AppStack extends Stack {
 
     lambdaDataSource.addDependsOn(graphqlApi);
 
-    const getPendingRequestsResolver = new appsync.CfnResolver(this, 'getPendingRequests', {
+    const getPendingRequestsResolver = new appsync.CfnResolver(this, pendingRequestsResolverId, {
       apiId: graphqlApi.attrApiId,
       typeName: 'Query',
-      fieldName: 'getPendingRequests',
+      fieldName: ApprovalQuery.GetRequests,
+      dataSourceName: lambdaDataSource.attrName,
+    });
+
+    const getReviewableRequestsResolver = new appsync.CfnResolver(this, reviewableRequestsResolverId, {
+      apiId: graphqlApi.attrApiId,
+      typeName: 'Query',
+      fieldName: ApprovalQuery.GetReviewableRequests,
       dataSourceName: lambdaDataSource.attrName,
     });
 
     getPendingRequestsResolver.addDependsOn(graphqlApiSchema);
     getPendingRequestsResolver.addDependsOn(lambdaDataSource);
+    getReviewableRequestsResolver.addDependsOn(graphqlApiSchema);
+    getReviewableRequestsResolver.addDependsOn(lambdaDataSource);
 
     const statement = new iam.PolicyStatement({
       actions: ['lambda:InvokeFunction'],
       resources: [ appSyncLambda.functionArn ]
     });
 
-    const policy = new iam.Policy(this, 'myLambda_policy', {
+    const policy = new iam.Policy(this, appSyncLambdaPolicy, {
         statements: [statement]
     });
 
