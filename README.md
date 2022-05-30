@@ -1,10 +1,40 @@
-# Welcome to your CDK TypeScript project
+# Serverless Approvals
 
-This is a blank project for TypeScript development with CDK.
+This is a project to manage approval requests using AWS serverless infrastructure.
 
-The `cdk.json` file tells the CDK Toolkit how to execute your app.
+## Architecture overview
 
-## Useful commands
+Architectural diagram
+
+### Current limitations
+
+List of limitations
+
+### Possible future improvements
+
+## Configuration
+
+By default, `[default]` AWS profile is used for AWS CDK configuration.
+If you want to use another named profile, you could specify it in `cdk.json` file as`"profile": "your_profile_name"`
+or provide a `--profile your_profile_name` parameter to AWS CDK command.
+
+## Installation
+
+Installation instruction.
+
+## Creating approval requests
+
+Event bus instruction.
+
+## Fetching approval requests
+
+AppSync Queries
+
+## Reviewing approval requests
+
+AppSync Mutations
+
+## Other useful commands
 
 * `npm run build`   compile typescript to js
 * `npm run watch`   watch for changes and compile
